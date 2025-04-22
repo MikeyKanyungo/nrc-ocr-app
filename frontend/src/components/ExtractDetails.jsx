@@ -13,10 +13,10 @@ const ExtractDetails = ({ onNext, onBack }) => {
   // 1. Retry Mechanism + Image Preview
   useEffect(() => {
     extractDetailsFromID();
-    // Load preview from storage
     const base64Image = sessionStorage.getItem("front_id");
     if (base64Image) {
-      setPreview(`data:image/jpeg;base64,${base64Image.split(",")[1]}`);
+      const fullUri = base64Image.startsWith("data:image") ? base64Image : `data:image/jpeg;base64,${base64Image}`;
+      setPreview(fullUri);
     }
   }, []);
 
@@ -38,11 +38,21 @@ const ExtractDetails = ({ onNext, onBack }) => {
 
   // 6. Client-side Validation
   const validateImage = (base64Str) => {
-    if (!base64Str.startsWith('data:image')) {
-      throw new Error("Invalid image format");
+    const isDataUri = /^data:image\/(jpeg|png);base64,/.test(base64Str);
+    let base64content = "";
+    if (isDataUri) {
+      base64content = base64Str.split(',')[1];
+    } else {
+      base64content = base64Str;  
     }
-    if (base64Str.length > 5 * 1024 * 1024) { // 5MB max
-      throw new Error("Image too large (max 5MB)");
+    const isPureBase64 = /^[A-Za-z0-9+/]+={0,2}$/.test(base64content);
+    if (!isPureBase64 && !isDataUri) {
+      throw new Error("Invalid image format"); 
+    }
+    const maxBytes = 5 * 1024 * 1024;
+    const approxSize = isDataUri ? base64Str.length : Math.floor(base64Str.length * 1.37);
+    if (approxSize > maxBytes) {
+      throw new Error(`Image too large (max ${Math.floor(maxBytes / 1024 / 1024)} MB)`);
     }
   };
 
@@ -75,7 +85,7 @@ const ExtractDetails = ({ onNext, onBack }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           image: base64Image,
-          type: idType // 4. ID Type Support
+          
         }),
       });
 
@@ -117,13 +127,7 @@ const ExtractDetails = ({ onNext, onBack }) => {
       }
     };
 
-    const rules = patterns[idType] || patterns.drivers_license;
-    return {
-      name: text.match(rules.name)?.[1]?.trim() || "Not found",
-      ...(idType === 'passport' && {
-        country: text.match(rules.country)?.[1] || "Not found"
-      })
-    };
+    
   };
 
   // Render Section
